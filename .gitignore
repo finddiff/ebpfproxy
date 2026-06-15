@@ -1,0 +1,8 @@
+*.dae
+*.json
+.git/
+bin/
+.github/
+.idea/
+.opencode
+webui/node_modules/
