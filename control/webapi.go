@@ -45,28 +45,28 @@ type OriginalRuleInfo struct {
 }
 
 type ConnectionInfo struct {
-	ID         string    `json:"id"`
-	Protocol   string    `json:"protocol"`
-	SourceIP   string    `json:"source_ip"`
-	SourcePort uint16    `json:"source_port"`
-	DestIP     string    `json:"dest_ip"`
-	DestPort   uint16    `json:"dest_port"`
-	Outbound   string    `json:"outbound"`
-	Dialer     string    `json:"dialer"`
-	Domain     string    `json:"domain"`
-	Policy     string    `json:"policy"`
-	Mac        string    `json:"mac"`
-	Process    string    `json:"process"`
-	Dscp       uint8     `json:"dscp"`
-	Network    string    `json:"network"`
-	RuleIndex  int       `json:"rule_index"`
-	Duration   float64   `json:"duration_seconds"`
-	Upload      uint64    `json:"upload_bytes"`
-	Download    uint64    `json:"download_bytes"`
-	UploadRate  uint64    `json:"upload_rate"`
-	DownloadRate uint64   `json:"download_rate"`
-	State      string    `json:"state"`
-	StartTime  time.Time `json:"start_time"`
+	ID           string    `json:"id"`
+	Protocol     string    `json:"protocol"`
+	SourceIP     string    `json:"source_ip"`
+	SourcePort   uint16    `json:"source_port"`
+	DestIP       string    `json:"dest_ip"`
+	DestPort     uint16    `json:"dest_port"`
+	Outbound     string    `json:"outbound"`
+	Dialer       string    `json:"dialer"`
+	Domain       string    `json:"domain"`
+	Policy       string    `json:"policy"`
+	Mac          string    `json:"mac"`
+	Process      string    `json:"process"`
+	Dscp         uint8     `json:"dscp"`
+	Network      string    `json:"network"`
+	RuleIndex    int       `json:"rule_index"`
+	Duration     float64   `json:"duration_seconds"`
+	Upload       uint64    `json:"upload_bytes"`
+	Download     uint64    `json:"download_bytes"`
+	UploadRate   uint64    `json:"upload_rate"`
+	DownloadRate uint64    `json:"download_rate"`
+	State        string    `json:"state"`
+	StartTime    time.Time `json:"start_time"`
 }
 
 func matchTypeToString(mt consts.MatchType) string {
@@ -228,11 +228,15 @@ func (c *ControlPlane) GetRoutingRules() []RoutingRuleInfo {
 	var rules []RoutingRuleInfo
 	seenRules := make(map[string]bool)
 	for _, cm := range c.routingMatcher.compiledMatches {
-		if !c.isDisplayRule(cm) { continue }
+		if !c.isDisplayRule(cm) {
+			continue
+		}
 		outboundName := c.resolveOutboundName(cm, outboundNames)
 		ruleDetail := buildRuleDetail(cm)
 		dedupKey := ruleDetail + "|" + outboundName
-		if seenRules[dedupKey] { continue }
+		if seenRules[dedupKey] {
+			continue
+		}
 		seenRules[dedupKey] = true
 		rules = append(rules, RoutingRuleInfo{
 			Index: len(rules), MatchType: matchTypeToString(cm.matchType),
@@ -304,13 +308,19 @@ func (c *ControlPlane) GetDisplayRuleIndex(rawIndex int) int {
 	seenRules := make(map[string]bool)
 	displayIdx := 0
 	for i, cm := range c.routingMatcher.compiledMatches {
-		if !c.isDisplayRule(cm) { continue }
+		if !c.isDisplayRule(cm) {
+			continue
+		}
 		outboundName := c.resolveOutboundName(cm, outboundNames)
 		ruleDetail := buildRuleDetail(cm)
 		dedupKey := ruleDetail + "|" + outboundName
-		if seenRules[dedupKey] { continue }
+		if seenRules[dedupKey] {
+			continue
+		}
 		seenRules[dedupKey] = true
-		if i == rawIndex { return displayIdx }
+		if i == rawIndex {
+			return displayIdx
+		}
 		displayIdx++
 	}
 	return -1
@@ -399,8 +409,6 @@ func fmtPortStr(p uint16) string {
 func fmtUint32(n uint32) string {
 	return fmt.Sprintf("%d", n)
 }
-
-
 
 func (c *ControlPlane) GetConnections() []ConnectionInfo {
 	if c == nil {
@@ -500,7 +508,9 @@ func (c *ControlPlane) GetConnections() []ConnectionInfo {
 	} else {
 		c.inConnections.Range(func(key, value interface{}) bool {
 			conn, ok := key.(net.Conn)
-			if !ok { return true }
+			if !ok {
+				return true
+			}
 			info := ConnectionInfo{Protocol: "tcp", State: "established", StartTime: now}
 			if remoteAddr := conn.RemoteAddr(); remoteAddr != nil {
 				if host, _, err := net.SplitHostPort(remoteAddr.String()); err == nil {

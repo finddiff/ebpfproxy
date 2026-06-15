@@ -9,10 +9,10 @@ import (
 )
 
 type LogrusHook struct {
-	buffer   *LogBuffer
-	server   *Server
-	mu       sync.Mutex
-	levels   []logrus.Level
+	buffer *LogBuffer
+	server *Server
+	mu     sync.Mutex
+	levels []logrus.Level
 }
 
 func NewLogrusHook(server *Server, levels []logrus.Level) *LogrusHook {

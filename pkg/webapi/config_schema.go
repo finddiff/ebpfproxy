@@ -5,12 +5,12 @@ import "github.com/daeuniverse/dae/common/consts"
 func buildConfigSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"sections": map[string]interface{}{
-			"global":        buildGlobalSchema(),
-			"dns":           buildDnsSchema(),
-			"subscription":  buildSubscriptionSchema(),
-			"node":          buildNodeSchema(),
-			"group":         buildGroupSchema(),
-			"routing":       buildRoutingSchema(),
+			"global":       buildGlobalSchema(),
+			"dns":          buildDnsSchema(),
+			"subscription": buildSubscriptionSchema(),
+			"node":         buildNodeSchema(),
+			"group":        buildGroupSchema(),
+			"routing":      buildRoutingSchema(),
 		},
 	}
 }
@@ -38,8 +38,8 @@ func buildGlobalSchema() map[string]interface{} {
 			},
 			{
 				"name": "log_level", "label": "Log Level", "type": "enum",
-				"default": "info",
-				"enum":   []string{"error", "warn", "info", "debug", "trace"},
+				"default":     "info",
+				"enum":        []string{"error", "warn", "info", "debug", "trace"},
 				"description": "Logging verbosity level",
 			},
 			{
@@ -83,13 +83,13 @@ func buildGlobalSchema() map[string]interface{} {
 			},
 			{
 				"name": "allow_insecure", "label": "Allow Insecure TLS", "type": "boolean",
-				"default":     false, "advanced": true,
+				"default": false, "advanced": true,
 				"description": "Skip TLS certificate verification (not recommended)",
 			},
 			{
 				"name": "dial_mode", "label": "Dial Mode", "type": "enum",
-				"default": "domain",
-				"enum":    []string{"ip", "domain", "domain+", "domain++"},
+				"default":     "domain",
+				"enum":        []string{"ip", "domain", "domain+", "domain++"},
 				"description": "Domain routing mode: ip (resolve first) / domain (connect to domain) / domain+ / domain++",
 			},
 			{
@@ -110,7 +110,7 @@ func buildGlobalSchema() map[string]interface{} {
 			{
 				"name": "tls_implementation", "label": "TLS Implementation", "type": "enum",
 				"default": "tls", "advanced": true,
-				"enum":    []string{"tls", "utls"},
+				"enum":        []string{"tls", "utls"},
 				"description": "TLS stack: tls (Go crypto/tls) or utls (uTLS fingerprinting)",
 			},
 			{
@@ -128,25 +128,25 @@ func buildGlobalSchema() map[string]interface{} {
 					"qq_auto", "qq_11_1",
 				},
 				"dependencies": []map[string]string{{"field": "tls_implementation", "value": "utls"}},
-				"description": "Browser ClientHello fingerprint to imitate (only when tls_implementation=utls)",
+				"description":  "Browser ClientHello fingerprint to imitate (only when tls_implementation=utls)",
 			},
 			{
 				"name": "tls_fragment", "label": "TLS Fragment", "type": "boolean",
 				"default": false, "advanced": true,
 				"dependencies": []map[string]string{{"field": "tls_implementation", "value": "utls"}},
-				"description": "Enable TLS record fragmentation",
+				"description":  "Enable TLS record fragmentation",
 			},
 			{
 				"name": "tls_fragment_length", "label": "TLS Fragment Length", "type": "string",
 				"default": "50-100", "advanced": true,
 				"dependencies": []map[string]string{{"field": "tls_fragment", "value": "true"}},
-				"description": "TLS fragment length range (e.g., 50-100)",
+				"description":  "TLS fragment length range (e.g., 50-100)",
 			},
 			{
 				"name": "tls_fragment_interval", "label": "TLS Fragment Interval", "type": "string",
 				"default": "10-20", "advanced": true,
 				"dependencies": []map[string]string{{"field": "tls_fragment", "value": "true"}},
-				"description": "TLS fragment interval range in ms (e.g., 10-20)",
+				"description":  "TLS fragment interval range in ms (e.g., 10-20)",
 			},
 			{
 				"name": "pprof_port", "label": "Pprof Port", "type": "number",
@@ -160,12 +160,12 @@ func buildGlobalSchema() map[string]interface{} {
 			},
 			{
 				"name": "bootstrap_resolver", "label": "Bootstrap DNS Resolver", "type": "string",
-				"default":     "", "advanced": true,
+				"default": "", "advanced": true,
 				"description": "Explicit DNS resolver for bootstrap resolution (IP:port). Falls back to 119.29.29.29:53 and 223.5.5.5:53",
 			},
 			{
 				"name": "fallback_resolver", "label": "Fallback DNS Resolver", "type": "string",
-				"default":     "8.8.8.8:53", "advanced": true,
+				"default": "8.8.8.8:53", "advanced": true,
 				"description": "Fallback DNS resolver (IP:port)",
 			},
 			{
@@ -205,55 +205,55 @@ func buildDnsSchema() map[string]interface{} {
 		"fields": []map[string]interface{}{
 			{
 				"name": "bind", "label": "DNS Bind Address", "type": "string",
-				"default": "tcp+udp://0.0.0.0:53",
+				"default":     "tcp+udp://0.0.0.0:53",
 				"description": "Address the DNS server listens on",
 			},
 			{
 				"name": "ipversion_prefer", "label": "IP Version Preference", "type": "enum",
-				"default": "0",
-				"enum":    []map[string]interface{}{{"label": "No preference", "value": "0"}, {"label": "Prefer IPv4", "value": "4"}, {"label": "Prefer IPv6", "value": "6"}},
+				"default":     "0",
+				"enum":        []map[string]interface{}{{"label": "No preference", "value": "0"}, {"label": "Prefer IPv4", "value": "4"}, {"label": "Prefer IPv6", "value": "6"}},
 				"description": "Preferred IP version for DNS responses",
 			},
 			{
 				"name": "optimistic_cache", "label": "Optimistic Cache", "type": "boolean",
-				"default":     true, "advanced": true,
+				"default": true, "advanced": true,
 				"description": "Enable optimistic DNS caching",
 			},
 			{
 				"name": "optimistic_cache_ttl", "label": "Optimistic Cache TTL", "type": "number",
-				"default":     60, "min": 0, "advanced": true,
+				"default": 60, "min": 0, "advanced": true,
 				"dependencies": []map[string]string{{"field": "optimistic_cache", "value": "true"}},
-				"description": "Optimistic cache TTL in seconds",
+				"description":  "Optimistic cache TTL in seconds",
 			},
 			{
 				"name": "max_cache_size", "label": "Max Cache Size", "type": "number",
-				"default":     0, "min": 0, "advanced": true,
+				"default": 0, "min": 0, "advanced": true,
 				"description": "Max DNS cache entries (0=unlimited)",
 			},
 		},
 		"subsections": map[string]interface{}{
 			"upstream": map[string]interface{}{
-				"label":       "DNS Upstream",
-				"description": "Upstream DNS servers (name: scheme://host:port)",
-				"type":        "map_list",
-				"key_label":   "Server Name",
-				"value_label": "DNS URL",
+				"label":             "DNS Upstream",
+				"description":       "Upstream DNS servers (name: scheme://host:port)",
+				"type":              "map_list",
+				"key_label":         "Server Name",
+				"value_label":       "DNS URL",
 				"value_placeholder": "tcp+udp://dns.google:53",
 			},
 			"hosts": map[string]interface{}{
-				"label":       "DNS Hosts",
-				"description": "Static hosts entries (domain: ip)",
-				"type":        "map_list",
-				"key_label":   "Domain",
-				"value_label": "IP Address",
+				"label":             "DNS Hosts",
+				"description":       "Static hosts entries (domain: ip)",
+				"type":              "map_list",
+				"key_label":         "Domain",
+				"value_label":       "IP Address",
 				"value_placeholder": "192.168.1.1",
 			},
 			"fixed_domain_ttl": map[string]interface{}{
-				"label":       "Fixed Domain TTL",
-				"description": "Fixed TTL for specific domains (domain: seconds)",
-				"type":        "map_list",
-				"key_label":   "Domain",
-				"value_label": "TTL (seconds)",
+				"label":             "Fixed Domain TTL",
+				"description":       "Fixed TTL for specific domains (domain: seconds)",
+				"type":              "map_list",
+				"key_label":         "Domain",
+				"value_label":       "TTL (seconds)",
 				"value_placeholder": "60",
 			},
 			"dns_routing": map[string]interface{}{
@@ -314,18 +314,18 @@ func buildGroupSchema() map[string]interface{} {
 			},
 			{
 				"name": "tcp_check_url", "label": "Override TCP Check URLs", "type": "string_list",
-				"advanced": true,
+				"advanced":    true,
 				"description": "Override global tcp_check_url for this group",
 			},
 			{
 				"name": "tcp_check_http_method", "label": "Override Check HTTP Method", "type": "enum",
 				"default": "", "advanced": true,
-				"enum":    []string{"", "GET", "POST", "PUT", "PATCH", "DELETE", "COPY", "HEAD", "OPTIONS", "LINK", "UNLINK", "PURGE", "LOCK", "UNLOCK", "PROPFIND", "CONNECT", "TRACE"},
+				"enum":        []string{"", "GET", "POST", "PUT", "PATCH", "DELETE", "COPY", "HEAD", "OPTIONS", "LINK", "UNLINK", "PURGE", "LOCK", "UNLOCK", "PROPFIND", "CONNECT", "TRACE"},
 				"description": "Override global tcp_check_http_method",
 			},
 			{
 				"name": "udp_check_dns", "label": "Override UDP Check DNS", "type": "string_list",
-				"advanced": true,
+				"advanced":    true,
 				"description": "Override global udp_check_dns",
 			},
 			{

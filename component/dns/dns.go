@@ -68,7 +68,7 @@ func (d *Dns) Upstreams() []DnsUpstreamEntry {
 	return result
 }
 
-func (d *Dns) RequestRoutingRules() []DnsRoutingEntry { return nil }
+func (d *Dns) RequestRoutingRules() []DnsRoutingEntry  { return nil }
 func (d *Dns) ResponseRoutingRules() []DnsRoutingEntry { return nil }
 
 type NewOption struct {

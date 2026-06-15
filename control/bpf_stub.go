@@ -137,10 +137,10 @@ type bpfUdpConnState struct {
 			HasRouting uint8
 		}
 	}
-	Mac   [6]uint8
-	_     [2]byte
-	Pname [16]uint8
-	Pid   uint32
+	Mac     [6]uint8
+	_       [2]byte
+	Pname   [16]uint8
+	Pid     uint32
 	TxBytes uint64
 	RxBytes uint64
 }

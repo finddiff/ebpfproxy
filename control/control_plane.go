@@ -58,17 +58,17 @@ type ControlPlane struct {
 	listenIp   string
 
 	controlPlaneGenerationState
-	inConnections        sync.Map
-	connMetadata         *connMetadataStore
-	closedConns          *closedConnStore
-	connTransfers        sync.Map // map[net.Conn]*connTransfer
+	inConnections         sync.Map
+	connMetadata          *connMetadataStore
+	closedConns           *closedConnStore
+	connTransfers         sync.Map // map[net.Conn]*connTransfer
 	lastTransferSnapshots sync.Map // map[net.Conn]*transferSnapshot
 	bpfTransferSnapshots  sync.Map // map[string]*bpfTransferSnapshot
-	routingLRU           *otter.Cache[routingLRUKey, routingLRUValue]
-	originalRules        []OriginalRuleInfo
-	rejectNewConnections atomic.Bool
-	drainTracker         *controlPlaneDrainTracker
-	ipDomainMap          sync.Map // dstIP:dstPort -> domain (for direct conn enrichment)
+	routingLRU            *otter.Cache[routingLRUKey, routingLRUValue]
+	originalRules         []OriginalRuleInfo
+	rejectNewConnections  atomic.Bool
+	drainTracker          *controlPlaneDrainTracker
+	ipDomainMap           sync.Map // dstIP:dstPort -> domain (for direct conn enrichment)
 
 	controlPlaneDNSRuntime
 	dnsHandoffMu         sync.Mutex
@@ -731,13 +731,13 @@ func newControlPlaneWithContextOptions(
 	// New control plane.
 	cctx, cancel := context.WithCancel(context.Background())
 	plane = &ControlPlane{
-		log:               log,
-		runtimeStats:      newRuntimeStats(),
-		core:              core,
-		deferFuncs:        deferFuncs,
-		listenIp:          "0.0.0.0",
-		connMetadata:      newConnMetadataStore(),
-		closedConns:       newClosedConnStore(),
+		log:          log,
+		runtimeStats: newRuntimeStats(),
+		core:         core,
+		deferFuncs:   deferFuncs,
+		listenIp:     "0.0.0.0",
+		connMetadata: newConnMetadataStore(),
+		closedConns:  newClosedConnStore(),
 		controlPlaneGenerationState: controlPlaneGenerationState{
 			outbounds:           outbounds,
 			referencedOutbounds: referencedOutbounds,

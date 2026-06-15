@@ -29,17 +29,17 @@ var upgrader = websocket.Upgrader{
 }
 
 type Server struct {
-	hub         *Hub
-	mux         *http.ServeMux
-	httpServer  *http.Server
-	ln          gonet.Listener
+	hub          *Hub
+	mux          *http.ServeMux
+	httpServer   *http.Server
+	ln           gonet.Listener
 	controlPlane atomicControlPlane
-	confPath    string
-	configData  atomicConfig
-	logBuffer   *LogBuffer
-	startTime   time.Time
-	log         *logrus.Logger
-	token       string
+	confPath     string
+	configData   atomicConfig
+	logBuffer    *LogBuffer
+	startTime    time.Time
+	log          *logrus.Logger
+	token        string
 	onConfigSave func() error
 }
 
@@ -267,23 +267,23 @@ func (s *Server) sendOverviewUpdate() {
 	}
 
 	data := map[string]interface{}{
-		"timestamp":     time.Now().UnixMilli(),
-		"cpu_percent":   cpuPct,
-		"mem_used":      memUsed,
-		"mem_total":     memTotal,
-		"mem_percent":   memPercent,
-		"load_1":        load1,
-		"load_5":        load5,
-		"load_15":       load15,
-		"connections":   connCount,
-		"udp_sessions":  udpSessions,
-		"upload_rate":   uploadRate,
-		"download_rate": downloadRate,
-		"upload_total":  uploadTotal,
+		"timestamp":      time.Now().UnixMilli(),
+		"cpu_percent":    cpuPct,
+		"mem_used":       memUsed,
+		"mem_total":      memTotal,
+		"mem_percent":    memPercent,
+		"load_1":         load1,
+		"load_5":         load5,
+		"load_15":        load15,
+		"connections":    connCount,
+		"udp_sessions":   udpSessions,
+		"upload_rate":    uploadRate,
+		"download_rate":  downloadRate,
+		"upload_total":   uploadTotal,
 		"download_total": downloadTotal,
-		"net_sent":      netBytesSent,
-		"net_recv":      netBytesRecv,
-		"uptime":        time.Since(s.startTime).Seconds(),
+		"net_sent":       netBytesSent,
+		"net_recv":       netBytesRecv,
+		"uptime":         time.Since(s.startTime).Seconds(),
 	}
 	s.BroadcastJSON("overview", data)
 }
@@ -335,23 +335,23 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]interface{}{
-		"timestamp":      time.Now().UnixMilli(),
-		"cpu_percent":    cpuPct,
-		"mem_used":       memUsed,
-		"mem_total":      memTotal,
-		"mem_percent":    memPercent,
-		"load_1":         load1,
-		"load_5":         load5,
-		"load_15":        load15,
-		"connections":    connCount,
-		"udp_sessions":   udpSessions,
-		"upload_rate":    uploadRate,
-		"download_rate":  downloadRate,
-		"upload_total":   uploadTotal,
-		"download_total": downloadTotal,
-		"net_sent":       netBytesSent,
-		"net_recv":       netBytesRecv,
-		"uptime":         time.Since(s.startTime).Seconds(),
+		"timestamp":       time.Now().UnixMilli(),
+		"cpu_percent":     cpuPct,
+		"mem_used":        memUsed,
+		"mem_total":       memTotal,
+		"mem_percent":     memPercent,
+		"load_1":          load1,
+		"load_5":          load5,
+		"load_15":         load15,
+		"connections":     connCount,
+		"udp_sessions":    udpSessions,
+		"upload_rate":     uploadRate,
+		"download_rate":   downloadRate,
+		"upload_total":    uploadTotal,
+		"download_total":  downloadTotal,
+		"net_sent":        netBytesSent,
+		"net_recv":        netBytesRecv,
+		"uptime":          time.Since(s.startTime).Seconds(),
 		"traffic_samples": samples,
 	})
 }
@@ -629,9 +629,9 @@ func (s *Server) handleDNS(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleTokenVerify(w http.ResponseWriter, r *http.Request) {
 	type tokenStatus struct {
-		Required    bool   `json:"required"`
-		Valid       bool   `json:"valid"`
-		Configured  bool   `json:"configured"`
+		Required   bool `json:"required"`
+		Valid      bool `json:"valid"`
+		Configured bool `json:"configured"`
 	}
 	token := r.Header.Get("X-Token")
 	if token == "" {
