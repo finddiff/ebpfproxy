@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { apiGet, apiPut, apiPost } from '../api.js'
 import { configSchema } from '../configSchema.js'
 import { parseConfig } from '../configParser.js'
@@ -19,6 +19,9 @@ const saved = ref(false)
 const configRaw = ref('')
 const showPreview = ref(true)
 const validateError = ref('')
+const reloadStatus = ref(null)    // null | 'reloading' | 'success' | 'error' | 'busy'
+const reloadMessage = ref('')
+let reloadTimer = null
 
 onMounted(async () => {
   try {
@@ -33,6 +36,10 @@ onMounted(async () => {
     state.value = getDefaultState()
   }
   loading.value = false
+})
+
+onUnmounted(() => {
+  clearReloadPolling()
 })
 
 function getDefaultState() {
@@ -106,10 +113,70 @@ async function doValidate() {
   }
 }
 
+function startReloadPolling() {
+  clearReloadPolling()
+  reloadStatus.value = 'reloading'
+  reloadMessage.value = ''
+
+  const startedAt = Date.now()
+  const MAX_POLL_MS = 60000
+
+  reloadTimer = setInterval(async () => {
+    try {
+      const json = await apiGet('/api/config/reload-status')
+      const status = json.status
+      const msg = json.message || ''
+
+      if (status === 'done') {
+        reloadStatus.value = 'success'
+        reloadMessage.value = msg || 'Config reloaded successfully'
+        clearReloadPolling()
+      } else if (status === 'error') {
+        reloadStatus.value = 'error'
+        reloadMessage.value = msg || 'Reload failed'
+        clearReloadPolling()
+      } else if (status === 'busy') {
+        reloadStatus.value = 'busy'
+        reloadMessage.value = msg || 'Another reload is in progress'
+        clearReloadPolling()
+      } else if (status === 'processing') {
+        // still reloading, continue polling
+        reloadStatus.value = 'reloading'
+        reloadMessage.value = msg || 'Reloading...'
+      }
+
+      // Timeout after 60 seconds
+      if (Date.now() - startedAt >= MAX_POLL_MS) {
+        reloadStatus.value = 'error'
+        reloadMessage.value = 'Reload timed out after 60 seconds'
+        clearReloadPolling()
+      }
+    } catch (e) {
+      reloadStatus.value = 'error'
+      reloadMessage.value = 'Failed to check reload status: ' + (e.message || 'Network error')
+      clearReloadPolling()
+    }
+  }, 500)
+}
+
+function clearReloadPolling() {
+  if (reloadTimer) {
+    clearInterval(reloadTimer)
+    reloadTimer = null
+  }
+}
+
 async function saveConfig() {
+  if (reloadStatus.value === 'reloading') {
+    validateError.value = 'A reload is already in progress. Please wait for it to complete.'
+    return
+  }
   saving.value = true
   saved.value = false
   validateError.value = ''
+  clearReloadPolling()
+  reloadStatus.value = null
+  reloadMessage.value = ''
 
   try {
     // First validate
@@ -125,9 +192,12 @@ async function saveConfig() {
     saved.value = true
     setTimeout(() => saved.value = false, 3000)
     validateError.value = ''
-    if (!res.reloaded) {
-      validateError.value = 'Saved but reload may have failed. Check logs.'
-    }
+
+    // Brief delay so "Saved!" label is visible before polling starts
+    await new Promise(r => setTimeout(r, 500))
+
+    // Start polling reload status
+    startReloadPolling()
   } catch (e) {
     validateError.value = 'Save failed: ' + (e.message || 'Network error')
   }
@@ -144,12 +214,20 @@ async function saveConfig() {
           Validate
         </button>
         <button class="btn btn-primary" @click="saveConfig" :disabled="saving || !state">
-          {{ saving ? 'Saving...' : saved ? 'Saved!' : 'Save & Reload' }}
+          {{ saving ? 'Saving...' : reloadStatus === 'reloading' ? 'Reloading...' : saved ? 'Saved!' : 'Save & Reload' }}
         </button>
       </div>
     </div>
 
     <div v-if="validateError" class="error-box">{{ validateError }}</div>
+
+    <div v-if="reloadStatus" :class="['reload-banner', 'reload-' + reloadStatus]">
+      <span v-if="reloadStatus === 'reloading'" class="reload-spinner"></span>
+      <span v-else-if="reloadStatus === 'success'" class="reload-icon">&#10003;</span>
+      <span v-else-if="reloadStatus === 'error'" class="reload-icon">&#10007;</span>
+      <span v-else-if="reloadStatus === 'busy'" class="reload-icon">&#9888;</span>
+      <span class="reload-text">{{ reloadMessage }}</span>
+    </div>
 
     <div v-if="loading" class="loading">Loading config...</div>
 
@@ -245,6 +323,56 @@ async function saveConfig() {
   border-radius: 6px;
   font-size: 13px;
   white-space: pre-wrap;
+}
+
+.reload-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.reload-reloading {
+  background: #1f6feb20;
+  border-color: #1f6feb;
+  color: #58a6ff;
+}
+.reload-success {
+  background: #23863620;
+  border-color: #238636;
+  color: #3fb950;
+}
+.reload-error {
+  background: #f8514920;
+  border-color: #f85149;
+  color: #f85149;
+}
+.reload-busy {
+  background: #d2992220;
+  border-color: #d29922;
+  color: #d29922;
+}
+.reload-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #1f6feb40;
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: reload-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes reload-spin {
+  to { transform: rotate(360deg); }
+}
+.reload-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+.reload-text {
+  flex: 1;
 }
 
 .loading { color: #8b949e; padding: 40px; text-align: center; }

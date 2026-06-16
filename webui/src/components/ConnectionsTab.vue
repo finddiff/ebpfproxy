@@ -2,17 +2,23 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { apiGet } from '../api.js'
 
-const connections = ref([])
+const allConnections = ref([])
 const total = ref(0)
 const loading = ref(true)
 const searchQuery = ref('')
 const stateFilter = ref('all')
+const sourceFilter = ref('all')
 const sortKey = ref('bytes_down')
 const sortDir = ref(-1)
-const pageSize = 50
-const pageOffset = ref(0)
 let timer = null
 let searchDebounce = null
+
+// Virtual scroll
+const scrollContainer = ref(null)
+const scrollTop = ref(0)
+const containerHeight = ref(600)
+const itemHeight = 120 // approximate card height
+const bufferCount = 6
 
 onMounted(() => {
   loadData()
@@ -22,36 +28,21 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (searchDebounce) clearTi
 
 async function loadData() {
   try {
-    const json = await apiGet(`/api/connections?limit=${pageSize}&offset=${pageOffset.value * pageSize}`)
-    connections.value = json.connections || []
+    const json = await apiGet('/api/connections')
+    allConnections.value = json.connections || []
     total.value = json.total || 0
   } catch (e) { /* ignore */ }
   loading.value = false
 }
 
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
-
-function goPage(dir) {
-  const np = pageOffset.value + dir
-  if (np >= 0 && np < totalPages.value) {
-    pageOffset.value = np
-    loading.value = true
-    loadData()
-  }
-}
-
-function onSearchInput() {
-  if (searchDebounce) clearTimeout(searchDebounce)
-  searchDebounce = setTimeout(() => {
-    pageOffset.value = 0
-    loadData()
-  }, 300)
-}
-
+// Full client-side filter + sort
 const filteredConnections = computed(() => {
-  let list = connections.value
+  let list = allConnections.value
   if (stateFilter.value !== 'all') {
     list = list.filter(c => c.state === stateFilter.value)
+  }
+  if (sourceFilter.value !== 'all') {
+    list = list.filter(c => c.source === sourceFilter.value)
   }
   const q = searchQuery.value.toLowerCase().trim()
   if (q) {
@@ -77,6 +68,36 @@ const filteredConnections = computed(() => {
     return (va - vb) * sortDir.value
   })
 })
+
+// Virtual scroll computed
+const totalVirtualHeight = computed(() => filteredConnections.value.length * itemHeight)
+
+const visibleRange = computed(() => {
+  const start = Math.max(0, Math.floor(scrollTop.value / itemHeight) - bufferCount)
+  const visibleCount = Math.ceil(containerHeight.value / itemHeight)
+  const end = Math.min(filteredConnections.value.length, start + visibleCount + bufferCount * 2)
+  return { start, end }
+})
+
+const visibleItems = computed(() => {
+  const { start, end } = visibleRange.value
+  return filteredConnections.value.slice(start, end).map((item, i) => ({
+    item,
+    index: start + i,
+    style: { position: 'absolute', top: (start + i) * itemHeight + 'px', left: 0, right: 0 }
+  }))
+})
+
+function onScroll(e) {
+  scrollTop.value = e.target.scrollTop
+}
+
+function onSearchInput() {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    scrollTop.value = 0
+  }, 300)
+}
 
 function toggleSort(key) {
   if (sortKey.value === key) {
@@ -133,7 +154,13 @@ function sortLabel(key) {
       <div class="filter-group">
         <button v-for="s in ['all','syn_sent','established','closing','closed']" :key="s"
           :class="['filter-btn', { active: stateFilter === s }]"
-          @click="stateFilter = s; pageOffset = 0; loadData()">{{ s === 'all' ? 'All' : s }}</button>
+          @click="stateFilter = s">{{ s === 'all' ? 'All' : s }}</button>
+      </div>
+
+      <div class="filter-group">
+        <button v-for="s in ['all','userspace','kernel']" :key="s"
+          :class="['filter-btn', { active: sourceFilter === s }]"
+          @click="sourceFilter = s">{{ s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1) }}</button>
       </div>
 
       <div class="sort-group">
@@ -145,66 +172,57 @@ function sortLabel(key) {
       </div>
 
       <div class="header-actions">
-        <span class="count">{{ total }} conns</span>
+        <span class="count">{{ filteredConnections.length }} / {{ total }} conns</span>
         <button class="refresh-btn" @click="loadData">Refresh</button>
-        <button class="close-all-btn" @click="closeAll" :disabled="!connections.length">Close All</button>
+        <button class="close-all-btn" @click="closeAll" :disabled="!allConnections.length">Close All</button>
       </div>
-    </div>
-
-    <!-- Pagination -->
-    <div class="pagination" v-if="totalPages > 1">
-      <button class="page-btn" :disabled="pageOffset === 0" @click="goPage(-1)">‹ Prev</button>
-      <span class="page-info">{{ pageOffset + 1 }} / {{ totalPages }}</span>
-      <button class="page-btn" :disabled="pageOffset >= totalPages - 1" @click="goPage(1)">Next ›</button>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
     <div v-else-if="filteredConnections.length === 0" class="empty">No connections match</div>
-    <div v-else class="conn-cards">
-      <div v-for="(conn, idx) in filteredConnections" :key="pageOffset * pageSize + idx" :class="['conn-card', { closed: conn.state === 'closed' }]">
-        <div class="conn-top">
-          <span :class="['proto-badge', conn.protocol]">{{ conn.protocol }}</span>
-          <span v-if="conn.domain" class="domain">{{ conn.domain }}</span>
-          <span v-if="conn.state !== 'established' && conn.state !== 'active'" class="state-badge" :class="conn.state">{{ conn.state }}</span>
-          <span class="dur">{{ formatDuration(conn.duration_seconds) }}</span>
-          <button v-if="conn.state !== 'closed'" class="close-btn" @click="closeOne(conn.id)" title="Close connection">×</button>
-        </div>
-        <div class="conn-path">
-          <code>{{ conn.source_ip }}:{{ conn.source_port }}</code>
-          <span class="arrow">→</span>
-          <code>{{ conn.dest_ip }}:{{ conn.dest_port }}</code>
-        </div>
-        <div v-if="conn.outbound || conn.dialer || conn.policy || conn.process" class="conn-meta">
-          <span v-if="conn.rule_index >= 0" class="meta-tag rule">#{{ conn.rule_index }}</span>
-          <span v-if="conn.outbound" class="meta-tag outbound">out: {{ conn.outbound }}</span>
-          <span v-if="conn.dialer" class="meta-tag dialer">d: {{ conn.dialer }}</span>
-          <span v-if="conn.policy" class="meta-tag policy">{{ conn.policy }}</span>
-          <span v-if="conn.network" class="meta-tag network">{{ conn.network }}</span>
-          <span v-if="conn.process" class="meta-tag process">{{ conn.process }}</span>
-          <span v-if="conn.mac" class="meta-tag mac">{{ conn.mac }}</span>
-          <span v-if="conn.dscp" class="meta-tag dscp">dscp:{{ conn.dscp }}</span>
-        </div>
-        <div class="conn-stats">
-          <span :class="['up', { dim: !conn.upload_rate }]">↑ {{ formatBytes(conn.upload_rate || 0) }}/s</span>
-          <span :class="['down', { dim: !conn.download_rate }]">↓ {{ formatBytes(conn.download_rate || 0) }}/s</span>
-          <span class="total-up">↑ {{ formatBytes(conn.upload_bytes || 0) }} total</span>
-          <span class="total-down">↓ {{ formatBytes(conn.download_bytes || 0) }} total</span>
+    <div v-else ref="scrollContainer" class="conn-scroll" @scroll="onScroll">
+      <div class="conn-virtual" :style="{ height: totalVirtualHeight + 'px' }">
+        <div v-for="{ item: conn, style } in visibleItems" :key="conn.id || style.top" :style="style" class="conn-card-wrapper">
+          <div :class="['conn-card', { closed: conn.state === 'closed' }]">
+            <div class="conn-top">
+              <span :class="['proto-badge', conn.protocol]">{{ conn.protocol }}</span>
+              <span v-if="conn.domain" class="domain">{{ conn.domain }}</span>
+              <span v-if="conn.state !== 'established' && conn.state !== 'active'" class="state-badge" :class="conn.state">{{ conn.state }}</span>
+              <span class="dur">{{ formatDuration(conn.duration_seconds) }}</span>
+              <button v-if="conn.state !== 'closed'" class="close-btn" @click="closeOne(conn.id)" title="Close connection">×</button>
+            </div>
+            <div class="conn-path">
+              <code>{{ conn.source_ip }}:{{ conn.source_port }}</code>
+              <span class="arrow">→</span>
+              <code>{{ conn.dest_ip }}:{{ conn.dest_port }}</code>
+            </div>
+            <div v-if="conn.outbound || conn.dialer || conn.policy || conn.process" class="conn-meta">
+              <span v-if="conn.rule_index >= 0" class="meta-tag rule">#{{ conn.rule_index }}</span>
+              <span v-if="conn.outbound" class="meta-tag outbound">out: {{ conn.outbound }}</span>
+              <span v-if="conn.dialer" class="meta-tag dialer">d: {{ conn.dialer }}</span>
+              <span v-if="conn.policy" class="meta-tag policy">{{ conn.policy }}</span>
+              <span v-if="conn.network" class="meta-tag network">{{ conn.network }}</span>
+              <span v-if="conn.process" class="meta-tag process">{{ conn.process }}</span>
+              <span v-if="conn.mac" class="meta-tag mac">{{ conn.mac }}</span>
+              <span v-if="conn.dscp" class="meta-tag dscp">dscp:{{ conn.dscp }}</span>
+            </div>
+            <div class="conn-stats">
+              <span :class="['up', { dim: !conn.upload_rate }]">↑ {{ formatBytes(conn.upload_rate || 0) }}/s</span>
+              <span :class="['down', { dim: !conn.download_rate }]">↓ {{ formatBytes(conn.download_rate || 0) }}/s</span>
+              <span class="total-up">↑ {{ formatBytes(conn.upload_bytes || 0) }} total</span>
+              <span class="total-down">↓ {{ formatBytes(conn.download_bytes || 0) }} total</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Bottom pagination -->
-    <div class="pagination bottom" v-if="totalPages > 1">
-      <button class="page-btn" :disabled="pageOffset === 0" @click="goPage(-1)">‹ Prev</button>
-      <span class="page-info">{{ pageOffset + 1 }} / {{ totalPages }}</span>
-      <button class="page-btn" :disabled="pageOffset >= totalPages - 1" @click="goPage(1)">Next ›</button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.connections h2 { margin: 0 0 12px 0; color: #c9d1d9; font-size: 18px; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+.connections { display: flex; flex-direction: column; height: 100%; }
+.connections h2 { margin: 0 0 12px 0; color: #c9d1d9; font-size: 18px; flex-shrink: 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; flex-shrink: 0; }
 .search-box {
   flex: 1; min-width: 180px; max-width: 280px; padding: 7px 12px;
   background: #0d1117; color: #c9d1d9; border: 1px solid #30363d;
@@ -232,19 +250,11 @@ function sortLabel(key) {
 .refresh-btn:hover { background: #30363d; color: #c9d1d9; }
 .close-all-btn:hover { background: #f8514920; color: #f85149; border-color: #f8514940; }
 .close-all-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.loading, .empty { color: #8b949e; padding: 30px; text-align: center; }
+.loading, .empty { color: #8b949e; padding: 30px; text-align: center; flex-shrink: 0; }
 
-.pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 8px 0; }
-.pagination.bottom { margin-top: 12px; }
-.page-btn {
-  padding: 5px 14px; background: #21262d; color: #8b949e; border: 1px solid #30363d;
-  border-radius: 4px; cursor: pointer; font-size: 12px;
-}
-.page-btn:hover:not(:disabled) { background: #30363d; color: #c9d1d9; }
-.page-btn:disabled { opacity: 0.3; cursor: default; }
-.page-info { font-size: 12px; color: #8b949e; }
-
-.conn-cards { display: flex; flex-direction: column; gap: 8px; }
+.conn-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.conn-virtual { position: relative; width: 100%; }
+.conn-card-wrapper { padding: 0 2px 8px 2px; box-sizing: border-box; }
 .conn-card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; }
 .conn-card:hover { border-color: #1f6feb; }
 .conn-card.closed { opacity: 0.45; border-color: #21262d; }

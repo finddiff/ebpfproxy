@@ -123,4 +123,4 @@ require (
 //replace github.com/daeuniverse/dae-config-dist/go/dae_config => /home/mzz/antlrProjects/dae-config/build/go/dae_config
 
 // Use local fork with vmess1 support
-replace github.com/daeuniverse/outbound => /home/longxia/go/src/github/findiff/outbound
+replace github.com/daeuniverse/outbound => /home/longxia/go/src/github/finddiff/outbound
