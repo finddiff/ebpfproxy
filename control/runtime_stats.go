@@ -8,6 +8,7 @@ package control
 import (
 	"context"
 	"math"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -296,6 +297,9 @@ func (c *ControlPlane) recordDownloadTraffic(n int64) {
 }
 
 func (c *ControlPlane) SnapshotRuntimeStats(windowSec int, maxPoints int) RuntimeStatsSnapshot {
+	// Merge BPF global direct-traffic counters into runtimeStats before snapshotting.
+	c.MergeBpfTraffic()
+
 	activeConnections := 0
 	udpSessions := 0
 	if c != nil {
@@ -303,6 +307,59 @@ func (c *ControlPlane) SnapshotRuntimeStats(windowSec int, maxPoints int) Runtim
 		udpSessions = DefaultUdpEndpointPool.Len()
 	}
 	return c.runtimeStatsStore().snapshot(activeConnections, udpSessions, windowSec, maxPoints, time.Now())
+}
+
+// readBpfGlobalTraffic reads the global traffic_stats_map (PERCPU_ARRAY) and
+// returns the summed tx_bytes and rx_bytes across all CPUs.
+//
+// Note: bpfTrafficStats is defined here (not in bpf_stub.go) because bpf_stub.go
+// has a //go:build dae_stub_ebpf constraint and is excluded from normal builds.
+type bpfTrafficStats struct {
+	TxBytes uint64
+	RxBytes uint64
+}
+
+func (c *ControlPlane) readBpfGlobalTraffic() (txBytes uint64, rxBytes uint64, err error) {
+	if c == nil || c.core == nil || c.core.bpf == nil || c.core.bpf.TrafficStatsMap == nil {
+		return 0, 0, nil
+	}
+	// PERCPU_ARRAY requires a slice to read all per-CPU values.
+	// ebpf.Map.Lookup with a single struct only returns one CPU's value.
+	ncpus := runtime.NumCPU()
+	stats := make([]bpfTrafficStats, ncpus)
+	var key uint32 = 0
+	if err := c.core.bpf.TrafficStatsMap.Lookup(&key, &stats); err != nil {
+		return 0, 0, err
+	}
+	for i := range stats {
+		txBytes += stats[i].TxBytes
+		rxBytes += stats[i].RxBytes
+	}
+	return txBytes, rxBytes, nil
+}
+
+// MergeBpfTraffic reads the BPF global traffic counters, computes the delta
+// since the last read, and records the delta into runtimeStats. This merges
+// direct (eBPF kernel-forwarded) traffic into the Overview totals.
+//
+// Uses uint64 natural wraparound for delta calculation — safe because counters
+// are monotonic and overflow is extremely rare at 64-bit scale.
+func (c *ControlPlane) MergeBpfTraffic() {
+	txBytes, rxBytes, err := c.readBpfGlobalTraffic()
+	if err != nil {
+		return
+	}
+
+	lastTx := c.lastBpfTxBytes.Swap(txBytes)
+	lastRx := c.lastBpfRxBytes.Swap(rxBytes)
+
+	// Compute delta (handles uint64 wraparound naturally via subtraction).
+	deltaTx := txBytes - lastTx
+	deltaRx := rxBytes - lastRx
+
+	if deltaTx > 0 || deltaRx > 0 {
+		c.runtimeStatsStore().record(deltaTx, deltaRx)
+	}
 }
 
 func bucketizeRuntimeSamples(samples []RuntimeTrafficSample, maxPoints int) []RuntimeTrafficSample {

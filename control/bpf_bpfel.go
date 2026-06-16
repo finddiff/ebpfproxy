@@ -13,6 +13,12 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type bpfBpfTrafficStats struct {
+	_       structs.HostLayout
+	TxBytes uint64
+	RxBytes uint64
+}
+
 type bpfConntrackArgs struct {
 	_        structs.HostLayout
 	Flags    uint8
@@ -453,6 +459,7 @@ type bpfMapSpecs struct {
 	RoutingMap               *ebpf.MapSpec `ebpf:"routing_map"`
 	RoutingMetaMap           *ebpf.MapSpec `ebpf:"routing_meta_map"`
 	TcpConnStateMap          *ebpf.MapSpec `ebpf:"tcp_conn_state_map"`
+	TrafficStatsMap          *ebpf.MapSpec `ebpf:"traffic_stats_map"`
 	UdpConnStateMap          *ebpf.MapSpec `ebpf:"udp_conn_state_map"`
 	UnusedLpmType            *ebpf.MapSpec `ebpf:"unused_lpm_type"`
 	WanEgressRouteScratchMap *ebpf.MapSpec `ebpf:"wan_egress_route_scratch_map"`
@@ -503,6 +510,7 @@ type bpfMaps struct {
 	RoutingMap               *ebpf.Map `ebpf:"routing_map"`
 	RoutingMetaMap           *ebpf.Map `ebpf:"routing_meta_map"`
 	TcpConnStateMap          *ebpf.Map `ebpf:"tcp_conn_state_map"`
+	TrafficStatsMap          *ebpf.Map `ebpf:"traffic_stats_map"`
 	UdpConnStateMap          *ebpf.Map `ebpf:"udp_conn_state_map"`
 	UnusedLpmType            *ebpf.Map `ebpf:"unused_lpm_type"`
 	WanEgressRouteScratchMap *ebpf.Map `ebpf:"wan_egress_route_scratch_map"`
@@ -528,6 +536,7 @@ func (m *bpfMaps) Close() error {
 		m.RoutingMap,
 		m.RoutingMetaMap,
 		m.TcpConnStateMap,
+		m.TrafficStatsMap,
 		m.UdpConnStateMap,
 		m.UnusedLpmType,
 		m.WanEgressRouteScratchMap,

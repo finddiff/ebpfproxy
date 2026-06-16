@@ -100,6 +100,10 @@ type ControlPlane struct {
 	lastUdpPressureAlertTime atomic.Int64
 	lastTcpPressureAlertTime atomic.Int64
 
+	// BPF global traffic counters (for merging direct traffic into runtimeStats)
+	lastBpfTxBytes atomic.Uint64
+	lastBpfRxBytes atomic.Uint64
+
 	wanInterface []string
 	lanInterface []string
 

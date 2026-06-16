@@ -145,6 +145,12 @@ type bpfUdpConnState struct {
 	RxBytes uint64
 }
 
+// bpfTrafficStats is the Go representation of the eBPF traffic_stats_map value.
+type bpfTrafficStats struct {
+	TxBytes uint64
+	RxBytes uint64
+}
+
 type bpfTcpConnState struct {
 	_                     structs.HostLayout
 	IsWanIngressDirection bool
@@ -235,6 +241,7 @@ type bpfMapSpecs struct {
 	RoutingMap              *ebpf.MapSpec `ebpf:"routing_map"`
 	RoutingMetaMap          *ebpf.MapSpec `ebpf:"routing_meta_map"`
 	TcpConnStateMap         *ebpf.MapSpec `ebpf:"tcp_conn_state_map"`
+	TrafficStatsMap         *ebpf.MapSpec `ebpf:"traffic_stats_map"`
 	UdpConnStateMap         *ebpf.MapSpec `ebpf:"udp_conn_state_map"`
 	UnusedLpmType           *ebpf.MapSpec `ebpf:"unused_lpm_type"`
 	WanEgressScratchMap     *ebpf.MapSpec `ebpf:"wan_egress_scratch_map"`
@@ -271,6 +278,7 @@ type bpfMaps struct {
 	RoutingMap              *ebpf.Map `ebpf:"routing_map"`
 	RoutingMetaMap          *ebpf.Map `ebpf:"routing_meta_map"`
 	TcpConnStateMap         *ebpf.Map `ebpf:"tcp_conn_state_map"`
+	TrafficStatsMap         *ebpf.Map `ebpf:"traffic_stats_map"`
 	UdpConnStateMap         *ebpf.Map `ebpf:"udp_conn_state_map"`
 	UnusedLpmType           *ebpf.Map `ebpf:"unused_lpm_type"`
 	WanEgressScratchMap     *ebpf.Map `ebpf:"wan_egress_scratch_map"`
@@ -291,6 +299,7 @@ func (m *bpfMaps) Close() error {
 		m.RoutingMap,
 		m.RoutingMetaMap,
 		m.TcpConnStateMap,
+		m.TrafficStatsMap,
 		m.UdpConnStateMap,
 		m.UnusedLpmType,
 		m.WanEgressScratchMap,
