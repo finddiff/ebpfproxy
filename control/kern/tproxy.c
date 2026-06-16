@@ -91,6 +91,18 @@ struct {
 	__uint(max_entries, 3);
 } listen_socket_map SEC(".maps");
 
+// Global traffic counter for WebUI Overview (direct traffic bytes).
+struct bpf_traffic_stats {
+	__u64 tx_bytes;
+	__u64 rx_bytes;
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__type(key, __u32);
+	__type(value, struct bpf_traffic_stats);
+	__uint(max_entries, 1);
+} traffic_stats_map SEC(".maps");
+
 union ip6 {
 	__u8 u6_addr8[16];
 	__be16 u6_addr16[8];
@@ -2178,9 +2190,16 @@ static __noinline int do_tproxy_lan_egress(struct __sk_buff *skb, u32 link_h_len
 		// Reverse-side TCP packets should refresh the forward conn-state and
 		// surface FIN/RST so the lifecycle does not remain ACTIVE until the
 		// janitor backstop expires.
-		mark_tcp_seen(&reversed_tuples_key, &ctx->tcph, true,
-			      NULL, NULL, NULL, NULL,
-			      0, NULL, 0);
+		// LAN egress sees de-NAT'd tuples that match conn_state keys, so
+		// we can count rx_bytes for DIRECT connections here.
+		struct tcp_conn_state *tcp_state;
+		tcp_state = mark_tcp_seen(&reversed_tuples_key, &ctx->tcph, true,
+					  NULL, NULL, NULL, NULL,
+					  0, NULL, 0);
+		if (tcp_state && tcp_state->meta.data.outbound == 0 /* OUTBOUND_DIRECT */) {
+			tcp_state->rx_bytes += skb->len;
+			{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->rx_bytes, skb->len); }
+		}
 	} else if (ctx->l4proto == IPPROTO_UDP) {
 		// DNS traffic is short-lived and stateless in our fast path.
 		// Skip tuple build + conntrack update to reduce state churn.
@@ -2196,9 +2215,16 @@ static __noinline int do_tproxy_lan_egress(struct __sk_buff *skb, u32 link_h_len
 		// Robustness: If conntrack map is full, gracefully degrade by continuing
 		// without state tracking. This is acceptable as the packet will be processed
 		// normally; we just lose connection tracking optimization.
-		mark_udp_seen(&reversed_tuples_key, true,
-			      NULL, NULL, NULL, NULL,
-			      0, NULL, 0);
+		// LAN egress sees de-NAT'd tuples that match conn_state keys, so
+		// we can count rx_bytes for DIRECT connections here.
+		struct udp_conn_state *udp_state;
+		udp_state = mark_udp_seen(&reversed_tuples_key, true,
+					  NULL, NULL, NULL, NULL,
+					  0, NULL, 0);
+		if (udp_state && udp_state->meta.data.outbound == 0 /* OUTBOUND_DIRECT */) {
+			udp_state->rx_bytes += skb->len;
+			{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->rx_bytes, skb->len); }
+		}
 	}
 
 	return TC_ACT_PIPE;
@@ -2328,8 +2354,10 @@ static __noinline int do_tproxy_lan_ingress(struct __sk_buff *skb, u32 link_h_le
 			// does not reliably write back to the map for tx_bytes on some kernels/verifiers.
 			// Use the same pattern as do_tproxy_wan_ingress rx_bytes counting.
 			struct tcp_conn_state *fresh = bpf_map_lookup_elem(&tcp_conn_state_map, &pkt->tuples.five);
-			if (fresh)
+			if (fresh) {
 				fresh->tx_bytes += skb->len;
+				{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->tx_bytes, skb->len); }
+			}
 			return TC_ACT_OK;
 		}
 		if (unlikely(outbound == OUTBOUND_BLOCK))
@@ -2377,8 +2405,10 @@ static __noinline int do_tproxy_lan_ingress(struct __sk_buff *skb, u32 link_h_le
 
 				if (outbound == OUTBOUND_DIRECT) {
 					skb->mark = mark;
-					if (udp_state)
+					if (udp_state) {
 						__sync_fetch_and_add(&udp_state->tx_bytes, skb->len);
+						{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->tx_bytes, skb->len); }
+					}
 					goto direct;
 				} else if (unlikely(outbound == OUTBOUND_BLOCK)) {
 					goto block;
@@ -2573,10 +2603,14 @@ static __noinline int do_tproxy_lan_ingress(struct __sk_buff *skb, u32 link_h_le
 	if (outbound == OUTBOUND_DIRECT) {
 		// Direct connection - pass through to kernel stack
 		skb->mark = mark;
-		if (tcp_state)
+		if (tcp_state) {
 			__sync_fetch_and_add(&tcp_state->tx_bytes, skb->len);
-		if (udp_state)
+			{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->tx_bytes, skb->len); }
+		}
+		if (udp_state) {
 			__sync_fetch_and_add(&udp_state->tx_bytes, skb->len);
+			{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->tx_bytes, skb->len); }
+		}
 #if defined(__DEBUG_ROUTING) || defined(__PRINT_ROUTING_RESULT)
 		bpf_printk("GO OUTBOUND DIRECT");
 #endif
@@ -2686,8 +2720,10 @@ static __noinline int do_tproxy_wan_ingress(struct __sk_buff *skb, u32 link_h_le
 		tcp_state = mark_tcp_seen(&reversed_tuples_key, &ctx->tcph, true,
 					 NULL, NULL, NULL, NULL,
 					 0, NULL, 0);
-		if (tcp_state && tcp_state->meta.data.outbound == 0 /* OUTBOUND_DIRECT */)
+		if (tcp_state && tcp_state->meta.data.outbound == 0 /* OUTBOUND_DIRECT */) {
 			tcp_state->rx_bytes += skb->len;
+			{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->rx_bytes, skb->len); }
+		}
 	} else if (ctx->l4proto == IPPROTO_UDP) {
 		// DNS traffic is short-lived and stateless in our fast path.
 		// Skip tuple build + conntrack update to reduce state churn.
@@ -2707,8 +2743,10 @@ static __noinline int do_tproxy_wan_ingress(struct __sk_buff *skb, u32 link_h_le
 		udp_state = mark_udp_seen(&reversed_tuples_key, true,
 			      NULL, NULL, NULL, NULL,
 			      0, NULL, 0);
-		if (udp_state && udp_state->meta.data.outbound == 0 /* OUTBOUND_DIRECT */)
+		if (udp_state && udp_state->meta.data.outbound == 0 /* OUTBOUND_DIRECT */) {
 			udp_state->rx_bytes += skb->len;
+			{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->rx_bytes, skb->len); }
+		}
 	}
 
 	return TC_ACT_PIPE;
@@ -2899,8 +2937,10 @@ do_tproxy_wan_egress_tcp(struct __sk_buff *skb, u32 link_h_len,
 			// Fast-path: pass through without further processing.
 			// Still count upload bytes for WebUI display
 			struct tcp_conn_state *s = bpf_map_lookup_elem(&tcp_conn_state_map, &tuples->five);
-			if (s)
+			if (s) {
 				s->tx_bytes += skb->len;
+				{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->tx_bytes, skb->len); }
+			}
 			return TC_ACT_OK;
 		}
 	}
@@ -3061,8 +3101,10 @@ fast_path_skip_routing:
 #endif
 
 	if (outbound == OUTBOUND_DIRECT && mark == 0) {
-		if (udp_conn_state)
+		if (udp_conn_state) {
 			udp_conn_state->tx_bytes += skb->len;
+			{ __u32 _k = 0; struct bpf_traffic_stats *_g = bpf_map_lookup_elem(&traffic_stats_map, &_k); if (_g) __sync_fetch_and_add(&_g->tx_bytes, skb->len); }
+		}
 		return TC_ACT_OK;
 	}
 	else if (unlikely(outbound == OUTBOUND_BLOCK))
