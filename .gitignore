@@ -7,3 +7,4 @@ bin/
 .opencode
 webui/node_modules/
 dae
+/.omo/
