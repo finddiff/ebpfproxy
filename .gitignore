@@ -8,3 +8,5 @@ bin/
 webui/node_modules/
 dae
 /.omo/
+/trace/bpf_x86_bpfel.go
+/trace/bpf_x86_bpfel.o
