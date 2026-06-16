@@ -66,6 +66,7 @@ type ConnectionInfo struct {
 	UploadRate   uint64    `json:"upload_rate"`
 	DownloadRate uint64    `json:"download_rate"`
 	State        string    `json:"state"`
+	Source       string    `json:"source"`
 	StartTime    time.Time `json:"start_time"`
 }
 
@@ -423,6 +424,7 @@ func (c *ControlPlane) GetConnections() []ConnectionInfo {
 	bpfConns := c.readBPFConnections()
 	bpfByKey := make(map[string]*ConnectionInfo, len(bpfConns))
 	for i := range bpfConns {
+		bpfConns[i].Source = "kernel"
 		key := connMatchKey(bpfConns[i].SourceIP, bpfConns[i].DestIP, bpfConns[i].SourcePort, bpfConns[i].DestPort, bpfConns[i].Protocol)
 		// Calculate BPF-based rates from snapshot
 		if last, ok := c.bpfTransferSnapshots.Load(key); ok {
@@ -447,6 +449,7 @@ func (c *ControlPlane) GetConnections() []ConnectionInfo {
 			info := ConnectionInfo{
 				Protocol:  "tcp",
 				State:     meta.State,
+				Source:    "userspace",
 				StartTime: meta.StartTime,
 				Domain:    meta.Domain,
 				Outbound:  meta.Outbound,
@@ -511,7 +514,7 @@ func (c *ControlPlane) GetConnections() []ConnectionInfo {
 			if !ok {
 				return true
 			}
-			info := ConnectionInfo{Protocol: "tcp", State: "established", StartTime: now}
+			info := ConnectionInfo{Protocol: "tcp", State: "established", Source: "userspace", StartTime: now}
 			if remoteAddr := conn.RemoteAddr(); remoteAddr != nil {
 				if host, _, err := net.SplitHostPort(remoteAddr.String()); err == nil {
 					info.DestIP = host
@@ -575,7 +578,7 @@ func (c *ControlPlane) GetConnections() []ConnectionInfo {
 				Domain: meta.Domain, Outbound: meta.Outbound, Dialer: meta.Dialer,
 				Policy: meta.Policy, Process: meta.Pname, Mac: meta.Mac, Dscp: meta.Dscp,
 				Network: meta.Network, RuleIndex: c.GetConnectionRuleIndex(meta),
-				State: "closed", StartTime: meta.StartTime,
+				State: "closed", Source: "userspace", StartTime: meta.StartTime,
 				Duration: meta.ClosedAt.Sub(meta.StartTime).Seconds(),
 			}
 			conns = append(conns, info)
